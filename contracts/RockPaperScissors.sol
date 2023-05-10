@@ -8,8 +8,6 @@ import "./HashLib.sol";
 contract RockPaperScissors is Ownable, Initializable {
     using HashLib for bytes32;
 
-    enum Choice { None, Rock, Paper, Scissors }
-
     address public player1;
     address public player2;
     bool public player1Ready;
@@ -74,7 +72,7 @@ contract RockPaperScissors is Ownable, Initializable {
         require(msg.sender == player1 || msg.sender == player2, "Invalid player");
         require(player1HashedChoice != bytes32(0) || player2HashedChoice != bytes32(0), "Both players have already revealed their choices");
 
-        for (uint i = 0; i <= uint(Choice.Scissors); i++) {
+        for (uint i = 0; i <= uint(HashLib.Choice.Scissors); i++) {
             HashLib.Choice choice = HashLib.Choice(i);
             HashLib.Choice player1ChoiceCheck = HashLib.recoverChoice(_player1Choice, choice, _player1Salt);
             if(player1ChoiceCheck != HashLib.Choice.None){
@@ -83,7 +81,7 @@ contract RockPaperScissors is Ownable, Initializable {
             }
         }
 
-        for (uint i = 0; i <= uint(Choice.Scissors); i++) {
+        for (uint i = 0; i <= uint(HashLib.Choice.Scissors); i++) {
             HashLib.Choice choice = HashLib.Choice(i);
             HashLib.Choice player2ChoiceCheck = HashLib.recoverChoice(_player2Choice, choice, _player2Salt);
             if(player2ChoiceCheck != HashLib.Choice.None){
