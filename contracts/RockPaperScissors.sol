@@ -11,12 +11,14 @@ contract RockPaperScissors is Ownable, Initializable {
     address public player2;
     bool public player1Ready;
     bool public player2Ready;
+    bytes32 public player1HashedChoice;
+    bytes32 public player2HashedChoice;
     Choice public player1Choice;
     Choice public player2Choice;
     bool public gameFinished = true;
 
     event GameStarted(address player1, address player2);
-    event MoveSubmitted(address player, Choice choice);
+    event MoveSubmitted(address player, bytes32 hashedChoice);
     event GameFinished(address winner, Choice winningChoice, address loser, Choice losingChoice);
 
     constructor() {}
@@ -38,6 +40,8 @@ contract RockPaperScissors is Ownable, Initializable {
             player2Ready = true;
             player1Choice = Choice.None;
             player2Choice = Choice.None;
+            player1HashedChoice = bytes32(0);
+            player2HashedChoice = bytes32(0);
             gameFinished = false;
             emit GameStarted(player1, player2);
         } else {
@@ -45,20 +49,55 @@ contract RockPaperScissors is Ownable, Initializable {
         }
     }
 
-    function submitMove(Choice _choice) external {
+    function hashChoice(Choice _choice, bytes32 _salt) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(_choice, _salt));
+    }
+
+    function recoverChoice(bytes32 _hashedChoice, Choice _choice, bytes32 _salt) internal pure returns (Choice) {
+        if (hashChoice(_choice, _salt) == _hashedChoice) {
+            return _choice;
+        } else {
+            return Choice.None;
+        }
+    }
+
+    function submitHashedChoice(bytes32 _hashedChoice) external {
         require(!gameFinished, "Game is not in progress");
         require(msg.sender == player1 || msg.sender == player2, "Invalid player");
-        require(_choice > Choice.None && _choice <= Choice.Scissors, "Invalid choice");
 
-        if (msg.sender == player1 && player1Choice == Choice.None) {
-            player1Choice = _choice;
-        } else if(msg.sender == player2 && player2Choice == Choice.None) {
-            player2Choice = _choice;
+        if (msg.sender == player1 && player1HashedChoice == bytes32(0)) {
+            player1HashedChoice = _hashedChoice;
+        } else if(msg.sender == player2 && player2HashedChoice == bytes32(0)) {
+            player2HashedChoice = _hashedChoice;
         }
 
-        emit MoveSubmitted(msg.sender, _choice);
+        emit MoveSubmitted(msg.sender, _hashedChoice);
+    }
 
-        if (player1Choice != Choice.None && player2Choice != Choice.None) {
+    function revealChoices(bytes32 _player1Choice, bytes32 _player1Salt, bytes32 _player2Choice, bytes32 _player2Salt) external {
+        require(!gameFinished, "Game is not in progress");
+        require(msg.sender == player1 || msg.sender == player2, "Invalid player");
+        require(player1HashedChoice != bytes32(0) || player2HashedChoice != bytes32(0), "Both players have already revealed their choices");
+
+        for (uint i = 0; i <= uint(Choice.Scissors); i++) {
+            Choice choice = Choice(i);
+            Choice player1ChoiceCheck = recoverChoice(_player1Choice, choice, _player1Salt);
+            if(player1ChoiceCheck != Choice.None){
+                player1Choice = player1ChoiceCheck;
+                break;
+            }
+        }
+
+        for (uint i = 0; i <= uint(Choice.Scissors); i++) {
+            Choice choice = Choice(i);
+            Choice player2ChoiceCheck = recoverChoice(_player2Choice, choice, _player2Salt);
+            if(player2ChoiceCheck != Choice.None){
+                player2Choice = player2ChoiceCheck;
+                break;
+            }
+        }
+
+        if (player1HashedChoice != bytes32(0) && player2HashedChoice != bytes32(0)) {
             finishGame();
         }
     }
@@ -100,6 +139,8 @@ contract RockPaperScissors is Ownable, Initializable {
         player2Ready = false;
         player1Choice = Choice.None;
         player2Choice = Choice.None;
+        player1HashedChoice = bytes32(0);
+        player2HashedChoice = bytes32(0);
 
         gameFinished = true;
 

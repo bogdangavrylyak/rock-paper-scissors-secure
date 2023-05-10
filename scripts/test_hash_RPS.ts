@@ -9,15 +9,19 @@ enum Choice {
   Scissors = 3,
 }
 
-const CONTRACT_ADDRESS = '0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f';
+// const CONTRACT_ADDRESS = '0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f';
+const CONTRACT_ADDRESS = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512';
 
 async function main() {
+  const signatureHash = ethers.utils.id('setPlayerAddress()');
+  log('signatureHash: ', signatureHash);
+
   const rpsContract: RockPaperScissors = await ethers.getContractAt(
     'RockPaperScissors',
     CONTRACT_ADDRESS,
   );
 
-  console.log('rpsContract: ', rpsContract.address);
+  console.log('rpsContract.address: ', rpsContract.address);
 
   const [deployer, owner2] = await ethers.getSigners();
   console.log('deployer: ', deployer.address);
@@ -32,9 +36,6 @@ async function main() {
   log('player1Ready1: ', player1Ready1);
   const player2Ready1 = await rpsContract.player1Ready();
   log('player2Ready1: ', player2Ready1);
-
-  const signatureHash = ethers.utils.id('setPlayerAddress()').substring(0, 10);
-  log('signatureHash: ', signatureHash);
 
   const setAddr1 = await rpsContract.setPlayerAddress();
 
@@ -65,14 +66,39 @@ async function main() {
   log('player1Choice0: ', player1Choice0);
   const player2Choice0 = await rpsContractOwner2.player1Choice();
   log('player2Choice0: ', player2Choice0);
-  const player1SubmitMoveSet = await rpsContract.submitMove(Choice.Paper);
+  const player1HashedChoice0 = await rpsContract.player1HashedChoice();
+  log('player1HashedChoice0: ', player1HashedChoice0);
+  const player2HashedChoice0 = await rpsContractOwner2.player2HashedChoice();
+  log('player2HashedChoice0: ', player2HashedChoice0);
+  const getPlayer1HashedChoice = await rpsContract.hashChoice(
+    Choice.Paper,
+    '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+  );
+  const player1SubmitMoveSet = await rpsContract.submitHashedChoice(
+    getPlayer1HashedChoice,
+  );
   const player1Choice1 = await rpsContract.player1Choice();
   log('player1Choice1: ', player1Choice1);
-  const player2SubmitMoveSet = await rpsContractOwner2.submitMove(
+  const player1HashedChoice1 = await rpsContract.player1HashedChoice();
+  log('player1HashedChoice1: ', player1HashedChoice1);
+  const getPlayer2HashedChoice = await rpsContract.hashChoice(
     Choice.Scissors,
+    '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcded',
+  );
+  const player2SubmitMoveSet = await rpsContractOwner2.submitHashedChoice(
+    getPlayer2HashedChoice,
   );
   const player2Choice1 = await rpsContract.player2Choice();
   log('player2Choice1: ', player2Choice1);
+  const player2HashedChoice1 = await rpsContract.player2HashedChoice();
+  log('player2HashedChoice1: ', player2HashedChoice1);
+
+  const revealChoices = await rpsContractOwner2.revealChoices(
+    player1HashedChoice1,
+    '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    player2HashedChoice1,
+    '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcded',
+  );
 
   const gameFinished3 = await rpsContract.gameFinished();
   log('gameFinished3: ', gameFinished3);
@@ -106,6 +132,10 @@ async function main() {
   log('player1Choice2: ', player1Choice2);
   const player2Choice2 = await rpsContract.player2Choice();
   log('player2Choice2: ', player2Choice2);
+  const player1HashedChoice2 = await rpsContract.player1HashedChoice();
+  log('player1HashedChoice2: ', player1HashedChoice2);
+  const player2HashedChoice2 = await rpsContract.player2HashedChoice();
+  log('player2HashedChoice2: ', player2HashedChoice2);
   const player1Ready2 = await rpsContract.player1Ready();
   log('player1Ready2: ', player1Ready2);
   const player2Ready2 = await rpsContract.player1Ready();

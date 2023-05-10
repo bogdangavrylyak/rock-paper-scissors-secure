@@ -10,3 +10,6 @@ cache
 artifacts
 deployments
 
+.DS_Store
+
+scripts/test_RPS
