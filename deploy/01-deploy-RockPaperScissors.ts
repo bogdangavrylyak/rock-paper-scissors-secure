@@ -26,13 +26,6 @@ const deployRockPaperScissors: DeployFunction = async function (
     args: [],
     log: true,
     waitConfirmations: waitBlockConfirmations,
-    proxy: {
-      proxyContract: 'OpenZeppelinTransparentProxy',
-      viaAdminContract: {
-        name: 'RockPaperScissorsProxyAdmin',
-        artifact: 'RockPaperScissorsProxyAdmin',
-      },
-    },
   });
 
   // Verify the deployment
