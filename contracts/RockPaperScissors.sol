@@ -2,137 +2,99 @@
 pragma solidity ^0.8.17;
 
 import "./HashLib.sol";
-import "hardhat/console.sol";
 
 contract RockPaperScissors {
     using HashLib for bytes32;
 
-    enum Choice { None, Rock, Paper, Scissors }
+    enum Choice { Rock, Paper, Scissors }
 
-    address public player1;
-    address public player2;
-    bytes32 public player1HashedChoice;
-    Choice public player1Choice;
-    Choice public player2Choice;
-    bool public gameFinished = true;
-    uint256 public player2ChoiceTimestamp;
-
-    event GameStarted(address player1, address player2);
-    event GameFinished(address winner, Choice winningChoice, address loser, Choice losingChoice);
-
-    function setPlayerAddress() external {
-        require(gameFinished, "Game is currently in progress");
-
-        if(player1 == address(0)){
-            player1 = msg.sender;
-        } else if(player2 == address(0)) {
-            player2 = msg.sender;
-            gameFinished = false;
-            emit GameStarted(player1, player2);
-        } else {
-            revert("Game already started");
-        }
+    struct Game {
+        address player1;
+        address player2;
+        bytes32 player1HashedChoice;
+        Choice player1Choice;
+        Choice player2Choice;
+        uint256 player2ChoiceTimestamp;
     }
 
-    function submitChoice(Choice _choice, bytes32 _salt) external {
-        require(!gameFinished, "Game is not in progress");
-        require(msg.sender == player1 || msg.sender == player2, "Invalid player");
-        require(_choice != Choice.None, "Choice can not be none");
+    Game[] public games;
 
-        if(player1HashedChoice == bytes32(0)) {
-            require(_choice != Choice.None, "Choice cannot be None");
-            player1HashedChoice = HashLib.hashChoice(_choice, _salt);
-        } else if(player1HashedChoice != bytes32(0) && player2Choice == Choice.None) {
-            player2Choice = _choice;
-            player2ChoiceTimestamp = block.timestamp;
-        }
+    event GameCreated(uint256 gameId, address player1);
+    event GameStarted(uint256 gameId, address player1, address player2);
+    event GameDraw(uint256 gameId, Choice player1Choice, Choice player2Choice);
+    event GameFinished(uint256 gameId, address winner, Choice winningChoice, address loser, Choice losingChoice);
+
+    function submitPlayer1Choice(bytes32 _hashedChoice) external {
+        Game memory newGame;
+        newGame.player1 = msg.sender;
+        newGame.player1HashedChoice = _hashedChoice;
+        games.push(newGame);
+        emit GameCreated(games.length - 1, msg.sender);
     }
 
-    function revealChoices(bytes32 _salt) external {
-        require(!gameFinished, "Game is not in progress");
-        require(msg.sender == player1 || msg.sender == player2, "Invalid player");
-        require(player1HashedChoice != bytes32(0) || player2Choice != Choice.None, "Both players have not yet revealed their choices");
+    function submitPlayer2Choice(Choice _choice, uint _gameId) external {
+        games[_gameId].player2 = msg.sender;
+        games[_gameId].player2Choice = _choice;
+        games[_gameId].player2ChoiceTimestamp = block.timestamp;
+
+        emit GameStarted(_gameId, games[_gameId].player1, games[_gameId].player2);
+    }
+
+    function checkAutoWin(uint _gameId) external {
+        Game storage game = games[_gameId];
+        require(msg.sender == game.player1 || msg.sender == game.player2, "Invalid player");
 
         // uint timeInterval = 1 hours;
         uint timeInterval = 60;
 
         if (
-            player1Choice == Choice.None 
-            && player1HashedChoice != bytes32(0) 
-            && block.timestamp >= player2ChoiceTimestamp + timeInterval
-            && block.timestamp <= player2ChoiceTimestamp + timeInterval * 2
+            game.player1HashedChoice != bytes32(0) 
+            && block.timestamp >= game.player2ChoiceTimestamp + timeInterval
+            && block.timestamp <= game.player2ChoiceTimestamp + timeInterval * 2
         ) {
-            finishGame(player2, player1, player2Choice, player1Choice);
-        } else if (
-            player1Choice == Choice.None 
-            && block.timestamp >= player2ChoiceTimestamp + timeInterval * 2
-        ) {
-            finishGame(player1, player2, player1Choice, player2Choice);
-        } else {
-            bytes32 player1HashedChoiceCheck = player1HashedChoice;
-
-            for (uint i = 0; i <= uint(Choice.Scissors); i++) {
-                Choice choice = Choice(i);
-                Choice player1ChoiceCheck = HashLib.recoverChoice(player1HashedChoiceCheck, choice, _salt);
-                if(player1ChoiceCheck != Choice.None){
-                    player1Choice = player1ChoiceCheck;
-                    break;
-                }
-            }
-
-            checkWin();
+            emit GameFinished(_gameId, game.player2, game.player2Choice, game.player1, game.player1Choice);
         }
     }
 
-    function checkWin() internal {
-        Choice winningChoice;
-        Choice losingChoice;
-        address winner;
-        address loser;
+    function revealChoice(Choice _player1choice, bytes32 _player1salt, uint _gameId) external {
+        Game storage game = games[_gameId];
+        require(msg.sender == game.player1 || msg.sender == game.player2, "Invalid player");
+        require(game.player1 != address(0) || game.player2 != address(0), "Both players have not yet revealed their choices");
 
-        if (player1Choice == player2Choice) {
-            winner = address(0);
-            loser = address(0);
-            winningChoice = Choice.None;
-            losingChoice = Choice.None;
+        bytes32 choiceCheck = HashLib.hashChoice(_player1choice, _player1salt);
 
-            emit GameFinished(winner, winningChoice, loser, losingChoice);
-        } else if (
-            (player1Choice == Choice.Rock && player2Choice == Choice.Scissors) ||
-            (player1Choice == Choice.Paper && player2Choice == Choice.Rock) ||
-            (player1Choice == Choice.Scissors && player2Choice == Choice.Paper)
-        ) {
-            winner = player1;
-            loser = player2;
-            winningChoice = player1Choice;
-            losingChoice = player2Choice;
-
-            finishGame(winner, loser, winningChoice, losingChoice);
+        if(choiceCheck != game.player1HashedChoice) {
+            revert('Wrong choice or salt');
         } else {
-            winner = player2;
-            loser = player1;
-            winningChoice = player2Choice;
-            losingChoice = player1Choice;
+            games[_gameId].player1Choice = _player1choice;
+        }
 
-            finishGame(winner, loser, winningChoice, losingChoice);
+        checkWin(games[_gameId], _gameId);
+    }
+
+    function checkWin(Game memory game, uint _gameId) internal {
+        if (game.player1Choice == game.player2Choice) {
+            emit GameDraw(_gameId, game.player1Choice, game.player2Choice);
+        } else if (
+            (game.player1Choice == Choice.Rock && game.player2Choice == Choice.Scissors) ||
+            (game.player1Choice == Choice.Paper && game.player2Choice == Choice.Rock) ||
+            (game.player1Choice == Choice.Scissors && game.player2Choice == Choice.Paper)
+        ) {
+            emit GameFinished(_gameId, game.player1, game.player1Choice, game.player2, game.player2Choice);
+        } else {
+            emit GameFinished(_gameId, game.player2, game.player2Choice, game.player1, game.player1Choice);
         }
     }
 
-     function finishGame(
-        address _winner,
-        address _loser,
-        Choice _winningChoice,
-        Choice _losingChoice
-     ) internal {
-        player1 = address(0);
-        player2 = address(0);
-        player1Choice = Choice.None;
-        player2Choice = Choice.None;
-        player1HashedChoice = bytes32(0);
-        player2ChoiceTimestamp = 0;
+    function getGameCount() external view returns (uint256) {
+        return games.length;
+    }
 
-        gameFinished = true;
+    function getGame(uint256 _gameId) external view returns (Game memory) {
+        return games[_gameId];
+    }
 
-        emit GameFinished(_winner, _winningChoice, _loser, _losingChoice);
-     }
+    function hashChoice(Choice _choice, bytes32 _salt) public pure returns (bytes32) {
+        return HashLib.hashChoice(_choice, _salt);
+    }
 }
